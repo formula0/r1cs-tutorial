@@ -1,5 +1,5 @@
 use ark_crypto_primitives::crh::TwoToOneCRH;
-use ark_crypto_primitives::merkle_tree::{Config, MerkleTree, Path};
+use mmr_crypto_primitives::merkle_mountain_range::{Config, Path};
 
 pub mod common;
 use common::*;
@@ -17,15 +17,15 @@ impl Config for MerkleConfig {
 }
 
 /// A Merkle tree containing account information.
-pub type SimpleMerkleTree = MerkleTree<MerkleConfig>;
+pub type SimpleMerkleMountainRange = MerkleMountainRange<MerkleConfig>;
 /// The root of the account Merkle tree.
 pub type Root = <TwoToOneHash as TwoToOneCRH>::Output;
 /// A membership proof for a given account.
 pub type SimplePath = Path<MerkleConfig>;
 
-// Run this test via `cargo test --release test_merkle_tree`.
+// Run this test via `cargo test --release test_merkle_mountain_range`.
 #[test]
-fn test_merkle_tree() {
+fn test_merkle_mountain_range() {
     use ark_crypto_primitives::crh::CRH;
     // Let's set up an RNG for use within tests. Note that this is *not* safe
     // for any production use.
@@ -36,8 +36,8 @@ fn test_merkle_tree() {
     let two_to_one_crh_params = <TwoToOneHash as TwoToOneCRH>::setup(&mut rng).unwrap();
 
     // Next, let's construct our tree.
-    // This follows the API in https://github.com/arkworks-rs/crypto-primitives/blob/6be606259eab0aec010015e2cfd45e4f134cd9bf/src/merkle_tree/mod.rs#L156
-    let tree = SimpleMerkleTree::new(
+    // This follows the API in https://github.com/arkworks-rs/crypto-primitives/blob/6be606259eab0aec010015e2cfd45e4f134cd9bf/src/merkle_mountain_range/mod.rs#L156
+    let tree = SimpleMerkleMountainRange::new(
         &leaf_crh_params,
         &two_to_one_crh_params,
         &[1u8, 2u8, 3u8, 10u8, 9u8, 17u8, 70u8, 45u8], // the i-th entry is the i-th leaf.

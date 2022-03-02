@@ -1,7 +1,7 @@
 use crate::common::*;
 use crate::{Root, SimplePath};
 use ark_crypto_primitives::crh::{TwoToOneCRH, TwoToOneCRHGadget, CRH};
-use ark_crypto_primitives::merkle_tree::constraints::PathVar;
+use mmr_crypto_primitives::merkle_mountain_range::{MerkleMountainRange, constraints::PathVar};
 use ark_r1cs_std::prelude::*;
 use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError};
 
@@ -17,7 +17,7 @@ pub type SimplePathVar =
 
 ////////////////////////////////////////////////////////////////////////////////
 
-pub struct MerkleTreeVerification {
+pub struct MerkleMountainRangeVerification {
     // These are constants that will be embedded into the circuit
     pub leaf_crh_params: <LeafHash as CRH>::Parameters,
     pub two_to_one_crh_params: <TwoToOneHash as TwoToOneCRH>::Parameters,
@@ -30,7 +30,7 @@ pub struct MerkleTreeVerification {
     pub authentication_path: Option<SimplePath>,
 }
 
-impl ConstraintSynthesizer<ConstraintF> for MerkleTreeVerification {
+impl ConstraintSynthesizer<ConstraintF> for MerkleMountainRangeVerification {
     fn generate_constraints(
         self,
         cs: ConstraintSystemRef<ConstraintF>,
@@ -56,17 +56,22 @@ impl ConstraintSynthesizer<ConstraintF> for MerkleTreeVerification {
         // Hint: look at https://github.com/arkworks-rs/crypto-primitives/blob/6be606259eab0aec010015e2cfd45e4f134cd9bf/src/merkle_tree/constraints.rs#L135
 
         // TODO: FILL IN THE BLANK!
-        // let is_member = XYZ
-        //
-        // is_member.enforce_equal(&Boolean::TRUE)?;
+        let is_member = // TODO: FILL IN THE BLANK!
+        path.verify_membership(
+        &leaf_crh_params,
+        &two_to_one_crh_params,
+        &root,
+        &leaf_bytes.as_slice(),
+    )?;
 
+    is_member.enforce_equal(&Boolean::TRUE)?;
         Ok(())
     }
 }
 
 // Run this test via `cargo test --release test_merkle_tree`.
 #[test]
-fn merkle_tree_constraints_correctness() {
+fn merkle_mountrain_range_constraints_correctness() {
     use ark_relations::r1cs::{ConstraintLayer, ConstraintSystem, TracingMode};
     use tracing_subscriber::layer::SubscriberExt;
 
@@ -80,7 +85,7 @@ fn merkle_tree_constraints_correctness() {
 
     // Next, let's construct our tree.
     // This follows the API in https://github.com/arkworks-rs/crypto-primitives/blob/6be606259eab0aec010015e2cfd45e4f134cd9bf/src/merkle_tree/mod.rs#L156
-    let tree = crate::SimpleMerkleTree::new(
+    let tree = crate::SimpleMerkleMountainRange::new(
         &leaf_crh_params,
         &two_to_one_crh_params,
         &[1u8, 2u8, 3u8, 10u8, 9u8, 17u8, 70u8, 45u8], // the i-th entry is the i-th leaf.
@@ -124,10 +129,10 @@ fn merkle_tree_constraints_correctness() {
     assert!(is_satisfied);
 }
 
-// Run this test via `cargo test --release test_merkle_tree_constraints_soundness`.
+// Run this test via `cargo test --release test_merkle_mountain_range_constraints_soundness`.
 // This tests that a given invalid authentication path will fail.
 #[test]
-fn merkle_tree_constraints_soundness() {
+fn merkle_mountain_range_constraints_soundness() {
     use ark_relations::r1cs::{ConstraintLayer, ConstraintSystem, TracingMode};
     use tracing_subscriber::layer::SubscriberExt;
 
@@ -141,7 +146,7 @@ fn merkle_tree_constraints_soundness() {
 
     // Next, let's construct our tree.
     // This follows the API in https://github.com/arkworks-rs/crypto-primitives/blob/6be606259eab0aec010015e2cfd45e4f134cd9bf/src/merkle_tree/mod.rs#L156
-    let tree = crate::SimpleMerkleTree::new(
+    let tree = crate::SimpleMerkleMountainRange::new(
         &leaf_crh_params,
         &two_to_one_crh_params,
         &[1u8, 2u8, 3u8, 10u8, 9u8, 17u8, 70u8, 45u8], // the i-th entry is the i-th leaf.
@@ -149,7 +154,7 @@ fn merkle_tree_constraints_soundness() {
     .unwrap();
 
     // We just mutate the first leaf
-    let second_tree = crate::SimpleMerkleTree::new(
+    let second_tree = crate::SimpleMerkleMountainRange::new(
         &leaf_crh_params,
         &two_to_one_crh_params,
         &[4u8, 2u8, 3u8, 10u8, 9u8, 17u8, 70u8, 45u8], // the i-th entry is the i-th leaf.

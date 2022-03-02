@@ -1,5 +1,5 @@
 [package]
-name = "ark-crypto-primitives"
+name = "mmr-crypto-primitives"
 version = "0.3.0"
 authors = [ "arkworks contributors" ]
 description = "A library of useful cryptographic primitives"
