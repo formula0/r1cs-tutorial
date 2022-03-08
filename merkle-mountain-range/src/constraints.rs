@@ -1,5 +1,5 @@
 use ark_crypto_primitives::crh::TwoToOneCRHSchemeGadget;
-use crate::merkle_mountain_range::{Config, IdentityDigestConverter};
+use crate::merkle-mountain-range::{Config, IdentityDigestConverter};
 use ark_crypto_primitives::{CRHSchemeGadget, Path};
 use ark_ff::Field;
 use ark_r1cs_std::alloc::AllocVar;

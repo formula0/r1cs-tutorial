@@ -1,7 +1,7 @@
 use crate::common::*;
 use crate::{Root, SimplePath};
 use ark_crypto_primitives::crh::{TwoToOneCRH, TwoToOneCRHGadget, CRH};
-use mmr_crypto_primitives::merkle_mountain_range::{MerkleMountainRange, constraints::PathVar};
+use mmr_crypto_primitives::merkle-mountain-range::constraints::PathVar;
 use ark_r1cs_std::prelude::*;
 use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError};
 
@@ -129,10 +129,10 @@ fn merkle_mountrain_range_constraints_correctness() {
     assert!(is_satisfied);
 }
 
-// Run this test via `cargo test --release test_merkle_mountain_range_constraints_soundness`.
+// Run this test via `cargo test --release test_merkle-mountain-range_constraints_soundness`.
 // This tests that a given invalid authentication path will fail.
 #[test]
-fn merkle_mountain_range_constraints_soundness() {
+fn merkle-mountain-range_constraints_soundness() {
     use ark_relations::r1cs::{ConstraintLayer, ConstraintSystem, TracingMode};
     use tracing_subscriber::layer::SubscriberExt;
 

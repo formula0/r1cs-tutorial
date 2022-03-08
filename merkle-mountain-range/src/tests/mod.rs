@@ -5,7 +5,7 @@ mod test_utils;
 mod bytes_mt_tests {
 
     use ark_crypto_primitives::crh::{pedersen, *};
-    use crate::merkle_mountain_range::*;
+    // use crate::merkle-mountain-range::*;
     use ark_ed_on_bls12_381::EdwardsProjective as JubJub;
     use ark_ff::BigInteger256;
     use ark_std::{test_rng, UniformRand};
@@ -118,9 +118,9 @@ mod bytes_mt_tests {
 
 mod field_mt_tests {
     use ark_crypto_primitives::crh::poseidon;
-    use crate::merkle_mountrain_range::tests::test_utils::poseidon_parameters;
-    use crate::merkle_mountrain_range::{Config, IdentityDigestConverter};
-    use crate::MerkleMountrainRange;
+    use crate::merkle-mountain-range::tests::test_utils::poseidon_parameters;
+    use crate::merkle-mountain-range::{Config, IdentityDigestConverter};
+    use crate::merkle-mountain-range::constraints::MerkleMountrainRange;
     use ark_std::{test_rng, One, UniformRand};
 
     type F = ark_ed_on_bls12_381::Fr;

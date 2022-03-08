@@ -14,6 +14,9 @@ mod tests;
 
 #[cfg(feature = "r1cs")]
 pub mod constraints;
+pub mod error;
+
+pub use error::{Error, Result};
 
 /// Convert the hash digest in different layers by converting previous layer's output to
 /// `TargetType`, which is a `Borrow` to next layer's input.
@@ -45,7 +48,7 @@ impl<T: CanonicalSerialize + ToBytes> DigestConverter<T, [u8]> for ByteDigestCon
 
     fn convert(item: T) -> Result<Self::TargetType, Error> {
         // TODO: In some tests, `serialize` is not consistent with constraints. Try fix those.
-        Ok(crate::to_unchecked_bytes!(item)?)
+        Ok(ark_crypto_primitive::to_unchecked_bytes!(item)?)
     }
 }
 
@@ -126,6 +129,9 @@ impl<P: Config> Path<P> {
     ///
     /// This function simply converts `self.leaf_index` to boolean array in big endian form.
     #[allow(unused)] // this function is actually used when r1cs feature is on
+
+    // TODO : edit this function to mmr version
+
     fn position_list(&'_ self) -> impl '_ + Iterator<Item = bool> {
         (0..self.auth_path.len() + 1)
             .map(move |i| ((self.leaf_index >> i) & 1) != 0)
@@ -134,6 +140,15 @@ impl<P: Config> Path<P> {
 }
 
 impl<P: Config> Path<P> {
+
+    pub fn new(leaf_sibling_hashe: P::LeafDigest, auth_path: Vec<P::InnerDigest>, leaf_index: usize) -> Self {
+        Path {
+            leaf_sibling_hash,
+            auth_path,
+            leaf_index,
+        }
+    }
+
     /// Verify that a leaf is at `self.index` of the merkle tree.
     /// * `leaf_size`: leaf size in number of bytes
     ///
@@ -212,17 +227,18 @@ fn select_left_right_child<L: Clone>(
 #[derive(Derivative)]
 #[derivative(Clone(bound = "P: Config"))]
 pub struct MerkleMountainRange<P: Config> {
-    /// stores the non-leaf nodes in level order. The first element is the root node.
-    /// The ith nodes (starting at 1st) children are at indices `2*i`, `2*i+1`
-    non_leaf_nodes: Vec<P::InnerDigest>,
-    /// store the hash of leaf nodes from left to right
-    leaf_nodes: Vec<P::LeafDigest>,
+    // /// stores the non-leaf nodes in level order. The first element is the root node.
+    // /// The ith nodes (starting at 1st) children are at indices `2*i`, `2*i+1`
+    // non_leaf_nodes: Vec<P::InnerDigest>,
+    // /// store the hash of leaf nodes from left to right
+    // leaf_nodes: Vec<P::LeafDigest>,
+    batch: Vec<(usize, Vec<P::InnerDigest, P::LeafDigest>)>,
     /// Store the inner hash parameters
     two_to_one_hash_param: TwoToOneParam<P>,
     /// Store the leaf hash parameters
     leaf_hash_param: LeafParam<P>,
-    /// Stores the height of the MerkleMountainRange
-    height: usize,
+    /// Stores the size of the MerkleMountainRange
+    mmr_size: usize,
 }
 
 impl<P: Config> MerkleMountainRange<P> {
@@ -231,11 +247,9 @@ impl<P: Config> MerkleMountainRange<P> {
     pub fn blank(
         leaf_hash_param: &LeafParam<P>,
         two_to_one_hash_param: &TwoToOneParam<P>,
-        height: usize,
     ) -> Result<Self, crate::Error> {
         // use empty leaf digest
-        let leaves_digest = vec![P::LeafDigest::default(); 1 << (height - 1)];
-        Self::new_with_leaf_digest(leaf_hash_param, two_to_one_hash_param, leaves_digest)
+        self.push(leaf_hash_param, two_to_one_hash_param, P::LeafDigest::default())
     }
 
     /// Returns a new merkle tree. `leaves.len()` should be power of two.
@@ -248,124 +262,143 @@ impl<P: Config> MerkleMountainRange<P> {
 
         // compute and store hash values for each leaf
         for leaf in leaves.into_iter() {
-            leaves_digests.push(P::LeafHash::evaluate(leaf_hash_param, leaf)?)
+            let leaf_digest = P::LeafHash::evaluate(leaf_hash_param, leaf)?;
+            self.push(leaf_hash_param, two_to_one_hash_param, leaves_digest)
         }
-
-        Self::new_with_leaf_digest(leaf_hash_param, two_to_one_hash_param, leaves_digests)
     }
 
-    pub fn new_with_leaf_digest(
+    pub fn push(&self,
         leaf_hash_param: &LeafParam<P>,
         two_to_one_hash_param: &TwoToOneParam<P>,
-        leaves_digest: Vec<P::LeafDigest>,
+        elem: P::LeafDigest
     ) -> Result<Self, crate::Error> {
-        let leaf_nodes_size = leaves_digest.len();
-        assert!(
-            leaf_nodes_size.is_power_of_two() && leaf_nodes_size > 1,
-            "`leaves.len() should be power of two and greater than one"
-        );
-        let non_leaf_nodes_size = leaf_nodes_size - 1;
+        let mut elems: Vec<P::LeafDigest, P::LeafDigest> = Vec::new();
+        // position of new elem
+        let elem_pos = self.mmr_size;
+        elems.push(elem);
+        let mut height = 0u32;
+        let mut pos = elem_pos;
+        let next_height = pos_height_in_tree(pos + 1);
+        // continue to merge tree node if next pos heigher than current
+        while next_height > height {
+            pos += 1;
+            let left_pos = pos - parent_offset(height);
+            let right_pos = left_pos + sibling_offset(height);
+            let mut left_elem = self.find_elem(left_pos, &elems)?;
+            let mut right_elem = self.find_elem(right_pos, &elems)?;
 
-        let tree_height = tree_height(leaf_nodes_size);
-
-        let hash_of_empty: P::InnerDigest = P::InnerDigest::default();
-
-        // initialize the merkle tree as array of nodes in level order
-        let mut non_leaf_nodes: Vec<P::InnerDigest> = (0..non_leaf_nodes_size)
-            .map(|_| hash_of_empty.clone())
-            .collect();
-
-        // Compute the starting indices for each non-leaf level of the tree
-        let mut index = 0;
-        let mut level_indices = Vec::with_capacity(tree_height - 1);
-        for _ in 0..(tree_height - 1) {
-            level_indices.push(index);
-            index = left_child(index);
-        }
-
-        // compute the hash values for the non-leaf bottom layer
-        {
-            let start_index = level_indices.pop().unwrap();
-            let upper_bound = left_child(start_index);
-            for current_index in start_index..upper_bound {
-                // `left_child(current_index)` and `right_child(current_index) returns the position of
-                // leaf in the whole tree (represented as a list in level order). We need to shift it
-                // by `-upper_bound` to get the index in `leaf_nodes` list.
-                let left_leaf_index = left_child(current_index) - upper_bound;
-                let right_leaf_index = right_child(current_index) - upper_bound;
-                // compute hash
-                non_leaf_nodes[current_index] = P::TwoToOneHash::evaluate(
-                    &two_to_one_hash_param,
-                    P::LeafInnerDigestConverter::convert(leaves_digest[left_leaf_index].clone())?,
-                    P::LeafInnerDigestConverter::convert(leaves_digest[right_leaf_index].clone())?,
-                )?
+            if (next_height == 2) {
+                left_elem = P::LeafInnerDigestConverter::convert(left_elem);
+                right_elem = P::LeafInnerDigestConverter::convert(right_elem);
             }
-        }
 
-        // compute the hash values for nodes in every other layer in the tree
-        level_indices.reverse();
-        for &start_index in &level_indices {
-            // The layer beginning `start_index` ends at `upper_bound` (exclusive).
-            let upper_bound = left_child(start_index);
-            for current_index in start_index..upper_bound {
-                let left_index = left_child(current_index);
-                let right_index = right_child(current_index);
-                non_leaf_nodes[current_index] = P::TwoToOneHash::compress(
-                    &two_to_one_hash_param,
-                    non_leaf_nodes[left_index].clone(),
-                    non_leaf_nodes[right_index].clone(),
-                )?
-            }
+            let parent_elem = P::TwoToOneHash::compress(&two_to_one_hash_param, &left_elem, &right_elem);
+            elems.push(parent_elem);
+            height += 1
         }
+        // store hashes
+        self.batch.push(elem_pos, elems);
+        // update mmr_size
+        self.mmr_size = pos + 1;
 
         Ok(MerkleMountainRange {
-            leaf_nodes: leaves_digest,
-            non_leaf_nodes,
-            height: tree_height,
+            batch,
             leaf_hash_param: leaf_hash_param.clone(),
             two_to_one_hash_param: two_to_one_hash_param.clone(),
-        })
+            mmr_size,
+        })       
     }
 
-    /// Returns the root of the Merkle tree.
+    fn find_elem<'b>(&self, pos: usize, hashes: &'b [P::LeafDigest]) -> Result<Cow<'b, T>> {
+        let pos_offset = pos.checked_sub(self.mmr_size);
+        if let Some(elem) = pos_offset.and_then(|i| hashes.get(i as usize)) {
+            return Ok(Cow::Borrowed(elem));
+        }
+        let elem = self.get_elem(pos as u64)?.ok_or(Error::InconsistentStore)?;
+        Ok(Cow::Owned(elem))
+    }
+
+    pub fn get_elem(&self, pos: u64) -> Result<Option<Elem>> {
+        for (start_pos, elems) in self.batch.iter().rev() {
+            if pos < *start_pos {
+                continue;
+            } else if pos < start_pos + elems.len() as u64 {
+                return Ok(elems.get((pos - start_pos) as usize).cloned());
+            } else {
+                break;
+            }
+        }
+    }
+
+    /// Returns the root of the Merkle mountain range.
     pub fn root(&self) -> P::InnerDigest {
-        self.non_leaf_nodes[0].clone()
+        if self.mmr_size == 0 {
+            return Err(Error::GetRootOnEmpty);
+        } else if self.mmr_size == 1 {
+            return self.get_elem(0)?.ok_or(Error::InconsistentStore);
+        }
+        let peaks: Vec<T> = get_peaks(self.mmr_size)
+            .into_iter()
+            .map(|peak_pos| {
+                self.batch
+                    .get_elem(peak_pos)
+                    .and_then(|elem| elem.ok_or(Error::InconsistentStore))
+            })
+            .collect::<Result<Vec<T>>>()?;
+        self.bag_rhs_peaks(peaks)?.ok_or(Error::InconsistentStore)
     }
 
-    /// Returns the height of the Merkle tree.
-    pub fn height(&self) -> usize {
-        self.height
+    pub fn bag_rhs_peaks(&self, mut rhs_peaks: Vec<T>) -> Result<Option<P::InnerDigest>> {
+        // println!("rhs_peaks: {:#?}", rhs_peaks);
+        while rhs_peaks.len() > 1 {
+            let right_peak = rhs_peaks.pop().expect("pop");
+            let left_peak = rhs_peaks.pop().expect("pop");
+            rhs_peaks.push(P::TwoToOneHash::compress(&self.two_to_one_hash_param, &right_peak, &left_peak));
+        }
+        Ok(rhs_peaks.pop())
+    }
+
+
+    /// Returns the height of the Merkle mountain range.
+    pub fn mmr_size(&self) -> usize {
+        self.mmr_size
     }
 
     /// Returns the authentication path from leaf at `index` to root.
-    pub fn generate_proof(&self, index: usize) -> Result<Path<P>, crate::Error> {
-        // gather basic tree information
-        let tree_height = tree_height(self.leaf_nodes.len());
+    pub fn generate_proof(&self, pos_list: Vec<u64>) -> Result<Path<P>, crate::Error> {
 
-        // Get Leaf hash, and leaf sibling hash,
-        let leaf_index_in_tree = convert_index_to_last_level(index, tree_height);
-        let leaf_sibling_hash = if index & 1 == 0 {
-            // leaf is left child
-            self.leaf_nodes[index + 1].clone()
-        } else {
-            // leaf is right child
-            self.leaf_nodes[index - 1].clone()
-        };
-
-        // path.len() = `tree height - 2`, the two missing elements being the leaf sibling hash and the root
-        let mut path = Vec::with_capacity(tree_height - 2);
-        // Iterate from the bottom layer after the leaves, to the top, storing all sibling node's hash values.
-        let mut current_node = parent(leaf_index_in_tree).unwrap();
-        while !is_root(current_node) {
-            let sibling_node = sibling(current_node).unwrap();
-            path.push(self.non_leaf_nodes[sibling_node].clone());
-            current_node = parent(current_node).unwrap();
+        if pos_list.is_empty() {
+            return Err(Error::GenProofForInvalidLeaves);
+        }
+        if self.mmr_size == 1 && index == 0 {
+            return Ok(Path::new(self.mmr_size, Vec::new()));
+        }
+        // ensure positions is sorted
+        let peaks = get_peaks(self.mmr_size);
+        let mut proof: Vec<T> = Vec::new();
+        // generate merkle proof for each peaks
+        let mut bagging_track = 0;
+        for peak_pos in peaks {
+            let pos_list: Vec<_> = take_while_vec(&mut pos_list, |&pos| pos <= peak_pos);
+            if pos_list.is_empty() {
+                bagging_track += 1;
+            } else {
+                bagging_track = 0;
+            }
+            self.gen_proof_for_peak(&mut proof, pos_list, peak_pos)?;
         }
 
-        debug_assert_eq!(path.len(), tree_height - 2);
+        // ensure no remain positions
+        if !pos_list.is_empty() {
+            return Err(Error::GenProofForInvalidLeaves);
+        }
 
-        // we want to make path from root to bottom
-        path.reverse();
+        if bagging_track > 1 {
+            let rhs_peaks = proof.split_off(proof.len() - bagging_track);
+            proof.push(self.bag_rhs_peaks(rhs_peaks)?.expect("bagging rhs peaks"));
+        }
+
+        // Ok(MerkleProof::new(self.mmr_size, proof))
 
         Ok(Path {
             leaf_index: index,
@@ -477,61 +510,90 @@ impl<P: Config> MerkleMountainRange<P> {
 }
 
 /// Returns the height of the tree, given the number of leaves.
-#[inline]
-fn tree_height(num_leaves: usize) -> usize {
-    if num_leaves == 1 {
-        return 1;
+pub fn leaf_index_to_pos(index: usize) -> usize {
+    // mmr_size - H - 1, H is the height(intervals) of last peak
+    leaf_index_to_mmr_size(index) - (index + 1).trailing_zeros() as usize - 1
+}
+
+pub fn leaf_index_to_mmr_size(index: usize) -> usize {
+    // leaf index start with 0
+    let leaves_count = index + 1;
+
+    // the peak count(k) is actually the count of 1 in leaves count's binary representation
+    let peak_count = leaves_count.count_ones() as usize;
+
+    2 * leaves_count - peak_count
+}
+
+pub fn pos_height_in_tree(mut pos: usize) -> usize {
+    pos += 1;
+    fn all_ones(num: usize) -> bool {
+        num != 0 && num.count_zeros() == num.leading_zeros()
+    }
+    fn jump_left(pos: usize) -> usize {
+        let bit_length = 64 - pos.leading_zeros();
+        let most_significant_bits = 1 << (bit_length - 1);
+        pos - (most_significant_bits - 1)
     }
 
-    (ark_std::log2(num_leaves) as usize) + 1
-}
-/// Returns true iff the index represents the root.
-#[inline]
-fn is_root(index: usize) -> bool {
-    index == 0
-}
-
-/// Returns the index of the left child, given an index.
-#[inline]
-fn left_child(index: usize) -> usize {
-    2 * index + 1
-}
-
-/// Returns the index of the right child, given an index.
-#[inline]
-fn right_child(index: usize) -> usize {
-    2 * index + 2
-}
-
-/// Returns the index of the sibling, given an index.
-#[inline]
-fn sibling(index: usize) -> Option<usize> {
-    if index == 0 {
-        None
-    } else if is_left_child(index) {
-        Some(index + 1)
-    } else {
-        Some(index - 1)
+    while !all_ones(pos) {
+        pos = jump_left(pos)
     }
+
+    64 - pos.leading_zeros() - 1
 }
 
-/// Returns true iff the given index represents a left child.
-#[inline]
-fn is_left_child(index: usize) -> bool {
-    index % 2 == 1
+pub fn parent_offset(height: usize) -> usize {
+    2 << height
 }
 
-/// Returns the index of the parent, given an index.
-#[inline]
-fn parent(index: usize) -> Option<usize> {
-    if index > 0 {
-        Some((index - 1) >> 1)
-    } else {
-        None
+pub fn sibling_offset(height: usize) -> usize {
+    (2 << height) - 1
+}
+
+pub fn get_peaks(mmr_size: usize) -> Vec<usize> {
+    let mut pos_s = Vec::new();
+    let (mut height, mut pos) = left_peak_height_pos(mmr_size);
+    pos_s.push(pos);
+    while height > 0 {
+        let peak = match get_right_peak(height, pos, mmr_size) {
+            Some(peak) => peak,
+            None => break,
+        };
+        height = peak.0;
+        pos = peak.1;
+        pos_s.push(pos);
     }
+    pos_s
 }
 
-#[inline]
-fn convert_index_to_last_level(index: usize, tree_height: usize) -> usize {
-    index + (1 << (tree_height - 1)) - 1
+fn get_right_peak(mut height: usize, mut pos: usize, mmr_size: usize) -> Option<(usize, usize)> {
+    // move to right sibling pos
+    pos += sibling_offset(height);
+    // loop until we find a pos in mmr
+    while pos > mmr_size - 1 {
+        if height == 0 {
+            return None;
+        }
+        // move to left child
+        pos -= parent_offset(height - 1);
+        height -= 1;
+    }
+    Some((height, pos))
+}
+
+fn get_peak_pos_by_height(height: usize) -> usize {
+    (1 << (height + 1)) - 2
+}
+
+fn left_peak_height_pos(mmr_size: usize) -> (usize, usize) {
+    let mut height = 1;
+    let mut prev_pos = 0;
+    let mut pos = get_peak_pos_by_height(height);
+    while pos < mmr_size {
+        height += 1;
+        prev_pos = pos;
+        pos = get_peak_pos_by_height(height);
+    }
+    (height - 1, prev_pos)
 }

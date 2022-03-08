@@ -1,8 +1,8 @@
 mod byte_mt_tests {
     use ark_crypto_primitives::crh::{pedersen, TwoToOneCRHScheme, TwoToOneCRHSchemeGadget};
 
-    use crate::merkle_mountain_range::constraints::{BytesVarDigestConverter, ConfigGadget};
-    use crate::merkle_mountain_range::{ByteDigestConverter, Config, MerkleMountainRange};
+    use crate::merkle-mountain-range::constraints::{BytesVarDigestConverter, ConfigGadget};
+    use crate::merkle-mountain-range::{ByteDigestConverter, Config, MerkleMountainRange};
     use ark_crypto_primitives::{CRHScheme, CRHSchemeGadget, PathVar};
     use ark_ed_on_bls12_381::{constraints::EdwardsVar, EdwardsProjective as JubJub, Fq};
     #[allow(unused)]
@@ -241,10 +241,10 @@ mod byte_mt_tests {
 }
 
 mod field_mt_tests {
-    use crate::crh::{poseidon, TwoToOneCRHSchemeGadget};
-    use crate::merkle_tree::constraints::ConfigGadget;
-    use crate::merkle_tree::tests::test_utils::poseidon_parameters;
-    use crate::merkle_tree::{Config, IdentityDigestConverter};
+    use ark_crypto_primitives::crh::{poseidon, TwoToOneCRHSchemeGadget};
+    use crate::merkle-mountain-range::constraints::ConfigGadget;
+    use crate::merkle-mountain-range::tests::test_utils::poseidon_parameters;
+    use crate::merkle-mountain-range::{Config, IdentityDigestConverter};
     use crate::{CRHSchemeGadget, MerkleTree, PathVar};
     use ark_r1cs_std::alloc::AllocVar;
     use ark_r1cs_std::fields::fp::FpVar;
