@@ -4,6 +4,8 @@ members = [
     "merkle-tree-example",
     "simple-payments",
     "rollup",
+    "merkle-mountain-range",
+    "mmr-example",
 ]
 
 [profile.release]
