@@ -1,16 +1,11 @@
 [package]
 name = "mmr-crypto-primitives"
 version = "0.3.0"
-authors = [ "arkworks contributors" ]
-description = "A library of useful cryptographic primitives"
-homepage = "https://arkworks.rs"
-repository = "https://github.com/arkworks-rs/crypto-primitives"
-documentation = "https://docs.rs/ark-crypto-primitives/"
+authors = [ "hyemmie", "arkworks contributors" ]
+description = "mmr gadget based on ark-crypto-primitive"
 keywords = [ "r1cs", "pedersen", "blake2s", "snark", "schnorr" ]
 categories = ["cryptography"]
 include = ["Cargo.toml", "src", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
-license = "MIT/Apache-2.0"
-edition = "2018"
 
 ################################# Dependencies ################################
 
