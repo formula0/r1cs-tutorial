@@ -5,7 +5,7 @@ pub enum Error {
     InvalidArgument,
     GetRootOnEmpty,
     InconsistentStore,
-    StoreError(crate::string::String),
+    StoreError(std::string::String),
     /// proof items is not enough to build a tree
     CorruptedProof,
     /// The leaves is an empty list, or beyond the mmr range

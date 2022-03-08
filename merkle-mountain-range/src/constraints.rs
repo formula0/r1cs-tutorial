@@ -157,33 +157,33 @@ impl<P: Config, ConstraintF: Field, PG: ConfigGadget<P, ConstraintF>> PathVar<P,
         // The path to a leaf is described by the branching
         // decisions taken at each node. This corresponds to the position
         // of the leaf.
-        let mut path = leaf_index;
+        // let mut path = leaf_index;
 
-        // If leaves are numbered left-to-right starting from zero,
-        // then all left children have odd positions (least significant bit is one), while all
-        // right children have even positions (least significant bit is zero).
-        let leaf_is_right_child = path.remove(0);
+        // // If leaves are numbered left-to-right starting from zero,
+        // // then all left children have odd positions (least significant bit is one), while all
+        // // right children have even positions (least significant bit is zero).
+        // let leaf_is_right_child = path.remove(0);
 
-        // pad with zero if the length of `path` is too short
-        if path.len() < self.auth_path.len() {
-            path.extend((0..self.auth_path.len() - path.len()).map(|_| Boolean::constant(false)))
-        }
+        // // pad with zero if the length of `path` is too short
+        // if path.len() < self.auth_path.len() {
+        //     path.extend((0..self.auth_path.len() - path.len()).map(|_| Boolean::constant(false)))
+        // }
 
-        // truncate if the length of `path` is too long
-        path.truncate(self.auth_path.len());
+        // // truncate if the length of `path` is too long
+        // path.truncate(self.auth_path.len());
 
-        // branching decision starts from root, so we need to reverse it.
-        path.reverse();
+        // // branching decision starts from root, so we need to reverse it.
+        // path.reverse();
 
-        self.path = path;
-        self.leaf_is_right_child = leaf_is_right_child;
+        // self.path = path;
+        // self.leaf_is_right_child = leaf_is_right_child;
     }
 
     /// Return the leaf position index in little-endian form.
     pub fn get_leaf_position(&self) -> Vec<Boolean<ConstraintF>> {
-        ark_std::iter::once(self.leaf_is_right_child.clone())
-            .chain(self.path.clone().into_iter().rev())
-            .collect()
+        // ark_std::iter::once(self.leaf_is_right_child.clone())
+        //     .chain(self.path.clone().into_iter().rev())
+        //     .collect()
     }
 
     /// Calculate the root of the Merkle tree assuming that `leaf` is the leaf on the path defined by `self`.
@@ -194,41 +194,41 @@ impl<P: Config, ConstraintF: Field, PG: ConfigGadget<P, ConstraintF>> PathVar<P,
         two_to_one_params: &TwoToOneParam<PG, P, ConstraintF>,
         leaf: &PG::Leaf,
     ) -> Result<PG::InnerDigest, SynthesisError> {
-        let claimed_leaf_hash = PG::LeafHash::evaluate(leaf_params, leaf)?;
-        let leaf_sibling_hash = &self.leaf_sibling;
+        // let claimed_leaf_hash = PG::LeafHash::evaluate(leaf_params, leaf)?;
+        // let leaf_sibling_hash = &self.leaf_sibling;
 
-        // calculate hash for the bottom non_leaf_layer
+        // // calculate hash for the bottom non_leaf_layer
 
-        // We assume that when a bit is 0, it indicates that the currently hashed value H is the left child,
-        // and when bit is 1, it indicates our H is the right child.
-        // Thus `left_hash` is sibling if the bit `leaf_is_right_child` is 1, and is leaf otherwise.
+        // // We assume that when a bit is 0, it indicates that the currently hashed value H is the left child,
+        // // and when bit is 1, it indicates our H is the right child.
+        // // Thus `left_hash` is sibling if the bit `leaf_is_right_child` is 1, and is leaf otherwise.
 
-        let left_hash = self
-            .leaf_is_right_child
-            .select(leaf_sibling_hash, &claimed_leaf_hash)?;
-        let right_hash = self
-            .leaf_is_right_child
-            .select(&claimed_leaf_hash, leaf_sibling_hash)?;
+        // let left_hash = self
+        //     .leaf_is_right_child
+        //     .select(leaf_sibling_hash, &claimed_leaf_hash)?;
+        // let right_hash = self
+        //     .leaf_is_right_child
+        //     .select(&claimed_leaf_hash, leaf_sibling_hash)?;
 
-        // convert leaf digest to inner digest
-        let left_hash = PG::LeafInnerConverter::convert(left_hash)?;
-        let right_hash = PG::LeafInnerConverter::convert(right_hash)?;
+        // // convert leaf digest to inner digest
+        // let left_hash = PG::LeafInnerConverter::convert(left_hash)?;
+        // let right_hash = PG::LeafInnerConverter::convert(right_hash)?;
 
-        let mut curr_hash =
-            PG::TwoToOneHash::evaluate(two_to_one_params, left_hash.borrow(), right_hash.borrow())?;
-        // To traverse up a MT, we iterate over the path from bottom to top (i.e. in reverse)
+        // let mut curr_hash =
+        //     PG::TwoToOneHash::evaluate(two_to_one_params, left_hash.borrow(), right_hash.borrow())?;
+        // // To traverse up a MT, we iterate over the path from bottom to top (i.e. in reverse)
 
-        // At any given bit, the bit being 0 indicates our currently hashed value is the left,
-        // and the bit being 1 indicates our currently hashed value is on the right.
-        // Thus `left_hash` is the sibling if bit is 1, and it's the computed hash if bit is 0
-        for (bit, sibling) in self.path.iter().rev().zip(self.auth_path.iter().rev()) {
-            let left_hash = bit.select(sibling, &curr_hash)?;
-            let right_hash = bit.select(&curr_hash, sibling)?;
+        // // At any given bit, the bit being 0 indicates our currently hashed value is the left,
+        // // and the bit being 1 indicates our currently hashed value is on the right.
+        // // Thus `left_hash` is the sibling if bit is 1, and it's the computed hash if bit is 0
+        // for (bit, sibling) in self.path.iter().rev().zip(self.auth_path.iter().rev()) {
+        //     let left_hash = bit.select(sibling, &curr_hash)?;
+        //     let right_hash = bit.select(&curr_hash, sibling)?;
 
-            curr_hash = PG::TwoToOneHash::compress(two_to_one_params, &left_hash, &right_hash)?;
-        }
+        //     curr_hash = PG::TwoToOneHash::compress(two_to_one_params, &left_hash, &right_hash)?;
+        // }
 
-        Ok(curr_hash)
+        // Ok(curr_hash)
     }
 
     /// Check that hashing a Merkle tree path according to `self`, and
@@ -241,8 +241,8 @@ impl<P: Config, ConstraintF: Field, PG: ConfigGadget<P, ConstraintF>> PathVar<P,
         root: &PG::InnerDigest,
         leaf: &PG::Leaf,
     ) -> Result<Boolean<ConstraintF>, SynthesisError> {
-        let expected_root = self.calculate_root(leaf_params, two_to_one_params, leaf)?;
-        Ok(expected_root.is_eq(root)?)
+        // let expected_root = self.calculate_root(leaf_params, two_to_one_params, leaf)?;
+        // Ok(expected_root.is_eq(root)?)
     }
 
     /// Check that `old_leaf` is the leaf of the Merkle tree on the path defined by
@@ -256,9 +256,9 @@ impl<P: Config, ConstraintF: Field, PG: ConfigGadget<P, ConstraintF>> PathVar<P,
         old_leaf: &PG::Leaf,
         new_leaf: &PG::Leaf,
     ) -> Result<PG::InnerDigest, SynthesisError> {
-        self.verify_membership(leaf_params, two_to_one_params, old_root, old_leaf)?
-            .enforce_equal(&Boolean::TRUE)?;
-        Ok(self.calculate_root(leaf_params, two_to_one_params, new_leaf)?)
+        // self.verify_membership(leaf_params, two_to_one_params, old_root, old_leaf)?
+        //     .enforce_equal(&Boolean::TRUE)?;
+        // Ok(self.calculate_root(leaf_params, two_to_one_params, new_leaf)?)
     }
 
     /// Check that `old_leaf` is the leaf of the Merkle tree on the path defined by
@@ -274,8 +274,8 @@ impl<P: Config, ConstraintF: Field, PG: ConfigGadget<P, ConstraintF>> PathVar<P,
         old_leaf: &PG::Leaf,
         new_leaf: &PG::Leaf,
     ) -> Result<Boolean<ConstraintF>, SynthesisError> {
-        let actual_new_root =
-            self.update_leaf(leaf_params, two_to_one_params, old_root, old_leaf, new_leaf)?;
-        Ok(actual_new_root.is_eq(&new_root)?)
+        // let actual_new_root =
+        //     self.update_leaf(leaf_params, two_to_one_params, old_root, old_leaf, new_leaf)?;
+        // Ok(actual_new_root.is_eq(&new_root)?)
     }
 }

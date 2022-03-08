@@ -18,6 +18,14 @@ pub mod error;
 
 pub use error::{Error, Result};
 
+#[macro_use]
+extern crate ark_std;
+
+#[macro_use]
+extern crate derivative;
+mod macros;
+
+
 /// Convert the hash digest in different layers by converting previous layer's output to
 /// `TargetType`, which is a `Borrow` to next layer's input.
 pub trait DigestConverter<From, To: ?Sized> {
@@ -48,7 +56,7 @@ impl<T: CanonicalSerialize + ToBytes> DigestConverter<T, [u8]> for ByteDigestCon
 
     fn convert(item: T) -> Result<Self::TargetType, Error> {
         // TODO: In some tests, `serialize` is not consistent with constraints. Try fix those.
-        Ok(ark_crypto_primitive::to_unchecked_bytes!(item)?)
+        Ok(crate::to_unchecked_bytes!(item)?)
     }
 }
 
@@ -161,38 +169,38 @@ impl<P: Config> Path<P> {
         leaf: L,
     ) -> Result<bool, crate::Error> {
         // calculate leaf hash
-        let claimed_leaf_hash = P::LeafHash::evaluate(&leaf_hash_params, leaf)?;
-        // check hash along the path from bottom to root
-        let (left_child, right_child) =
-            select_left_right_child(self.leaf_index, &claimed_leaf_hash, &self.leaf_sibling_hash)?;
+        // let claimed_leaf_hash = P::LeafHash::evaluate(&leaf_hash_params, leaf)?;
+        // // check hash along the path from bottom to root
+        // let (left_child, right_child) =
+        //     select_left_right_child(self.leaf_index, &claimed_leaf_hash, &self.leaf_sibling_hash)?;
 
-        // leaf layer to inner layer conversion
-        let left_child = P::LeafInnerDigestConverter::convert(left_child)?;
-        let right_child = P::LeafInnerDigestConverter::convert(right_child)?;
+        // // leaf layer to inner layer conversion
+        // let left_child = P::LeafInnerDigestConverter::convert(left_child)?;
+        // let right_child = P::LeafInnerDigestConverter::convert(right_child)?;
 
-        let mut curr_path_node =
-            P::TwoToOneHash::evaluate(&two_to_one_params, left_child, right_child)?;
+        // let mut curr_path_node =
+        //     P::TwoToOneHash::evaluate(&two_to_one_params, left_child, right_child)?;
 
-        // we will use `index` variable to track the position of path
-        let mut index = self.leaf_index;
-        index >>= 1;
+        // // we will use `index` variable to track the position of path
+        // let mut index = self.leaf_index;
+        // index >>= 1;
 
-        // Check levels between leaf level and root
-        for level in (0..self.auth_path.len()).rev() {
-            // check if path node at this level is left or right
-            let (left, right) =
-                select_left_right_child(index, &curr_path_node, &self.auth_path[level])?;
-            // update curr_path_node
-            curr_path_node = P::TwoToOneHash::compress(&two_to_one_params, &left, &right)?;
-            index >>= 1;
-        }
+        // // Check levels between leaf level and root
+        // for level in (0..self.auth_path.len()).rev() {
+        //     // check if path node at this level is left or right
+        //     let (left, right) =
+        //         select_left_right_child(index, &curr_path_node, &self.auth_path[level])?;
+        //     // update curr_path_node
+        //     curr_path_node = P::TwoToOneHash::compress(&two_to_one_params, &left, &right)?;
+        //     index >>= 1;
+        // }
 
-        // check if final hash is root
-        if &curr_path_node != root_hash {
-            return Ok(false);
-        }
+        // // check if final hash is root
+        // if &curr_path_node != root_hash {
+        //     return Ok(false);
+        // }
 
-        Ok(true)
+        // Ok(true)
     }
 }
 
@@ -208,13 +216,13 @@ fn select_left_right_child<L: Clone>(
     computed_hash: &L,
     sibling_hash: &L,
 ) -> Result<(L, L), crate::Error> {
-    let is_left = index & 1 == 0;
-    let mut left_child = computed_hash;
-    let mut right_child = sibling_hash;
-    if !is_left {
-        core::mem::swap(&mut left_child, &mut right_child);
-    }
-    Ok((left_child.clone(), right_child.clone()))
+    // let is_left = index & 1 == 0;
+    // let mut left_child = computed_hash;
+    // let mut right_child = sibling_hash;
+    // if !is_left {
+    //     core::mem::swap(&mut left_child, &mut right_child);
+    // }
+    // Ok((left_child.clone(), right_child.clone()))
 }
 
 /// Defines a merkle tree data structure.
@@ -248,8 +256,13 @@ impl<P: Config> MerkleMountainRange<P> {
         leaf_hash_param: &LeafParam<P>,
         two_to_one_hash_param: &TwoToOneParam<P>,
     ) -> Result<Self, crate::Error> {
-        // use empty leaf digest
-        self.push(leaf_hash_param, two_to_one_hash_param, P::LeafDigest::default())
+        
+        MerkleMountainRange {
+            batch: vec![],
+            leaf_hash_param,
+            two_to_one_hash_param,
+            mmr_size: 0
+        }
     }
 
     /// Returns a new merkle tree. `leaves.len()` should be power of two.
@@ -261,101 +274,96 @@ impl<P: Config> MerkleMountainRange<P> {
         let mut leaves_digests = Vec::new();
 
         // compute and store hash values for each leaf
-        for leaf in leaves.into_iter() {
-            let leaf_digest = P::LeafHash::evaluate(leaf_hash_param, leaf)?;
-            self.push(leaf_hash_param, two_to_one_hash_param, leaves_digest)
-        }
+        // for leaf in leaves.into_iter() {
+        //     let leaf_digest = P::LeafHash::evaluate(leaf_hash_param, leaf)?;
+        //     Self::new_with_leaf(leaf_hash_param, two_to_one_hash_param, leaves_digest)
+        // }
     }
 
-    pub fn push(&self,
+    pub fn new_with_leaf(
         leaf_hash_param: &LeafParam<P>,
         two_to_one_hash_param: &TwoToOneParam<P>,
         elem: P::LeafDigest
-    ) -> Result<Self, crate::Error> {
-        let mut elems: Vec<P::LeafDigest, P::LeafDigest> = Vec::new();
-        // position of new elem
-        let elem_pos = self.mmr_size;
-        elems.push(elem);
-        let mut height = 0u32;
-        let mut pos = elem_pos;
-        let next_height = pos_height_in_tree(pos + 1);
-        // continue to merge tree node if next pos heigher than current
-        while next_height > height {
-            pos += 1;
-            let left_pos = pos - parent_offset(height);
-            let right_pos = left_pos + sibling_offset(height);
-            let mut left_elem = self.find_elem(left_pos, &elems)?;
-            let mut right_elem = self.find_elem(right_pos, &elems)?;
+    ) -> Result<usize, crate::Error> {
+        // let mut elems: Vec<P::LeafDigest, P::LeafDigest> = Vec::new();
+        // // position of new elem
+        // let elem_pos = self.mmr_size;
+        // elems.push(elem);
+        // let mut height = 0u32;
+        // let mut pos = elem_pos;
+        // let next_height = pos_height_in_tree(pos + 1);
+        // // continue to merge tree node if next pos heigher than current
+        // while next_height > height {
+        //     pos += 1;
+        //     let left_pos = pos - parent_offset(height);
+        //     let right_pos = left_pos + sibling_offset(height);
+        //     let mut left_elem = self.find_elem(left_pos, &elems)?;
+        //     let mut right_elem = self.find_elem(right_pos, &elems)?;
 
-            if (next_height == 2) {
-                left_elem = P::LeafInnerDigestConverter::convert(left_elem);
-                right_elem = P::LeafInnerDigestConverter::convert(right_elem);
-            }
+        //     if (next_height == 2) {
+        //         left_elem = P::LeafInnerDigestConverter::convert(left_elem);
+        //         right_elem = P::LeafInnerDigestConverter::convert(right_elem);
+        //     }
 
-            let parent_elem = P::TwoToOneHash::compress(&two_to_one_hash_param, &left_elem, &right_elem);
-            elems.push(parent_elem);
-            height += 1
-        }
-        // store hashes
-        self.batch.push(elem_pos, elems);
-        // update mmr_size
-        self.mmr_size = pos + 1;
+        //     let parent_elem = P::TwoToOneHash::compress(&two_to_one_hash_param, &left_elem, &right_elem);
+        //     elems.push(parent_elem);
+        //     height += 1
+        // }
+        // // store hashes
+        // self.batch.push(elem_pos, elems);
+        // // update mmr_size
+        // self.mmr_size = pos + 1;
 
-        Ok(MerkleMountainRange {
-            batch,
-            leaf_hash_param: leaf_hash_param.clone(),
-            two_to_one_hash_param: two_to_one_hash_param.clone(),
-            mmr_size,
-        })       
+        // Ok(elem_pos)       
     }
 
-    fn find_elem<'b>(&self, pos: usize, hashes: &'b [P::LeafDigest]) -> Result<Cow<'b, T>> {
-        let pos_offset = pos.checked_sub(self.mmr_size);
-        if let Some(elem) = pos_offset.and_then(|i| hashes.get(i as usize)) {
-            return Ok(Cow::Borrowed(elem));
-        }
-        let elem = self.get_elem(pos as u64)?.ok_or(Error::InconsistentStore)?;
-        Ok(Cow::Owned(elem))
+    fn find_elem<'b>(&self, pos: usize, hashes: &'b [P::LeafDigest]) -> Result<borrow::Cow<'b, P::LeafDigest, P::LeafDigest>> {
+        // let pos_offset = pos.checked_sub(self.mmr_size);
+        // if let Some(elem) = pos_offset.and_then(|i| hashes.get(i as usize)) {
+        //     return Ok(Cow::Borrowed(elem));
+        // }
+        // let elem = self.get_elem(pos as u64)?.ok_or(Error::InconsistentStore)?;
+        // Ok(Cow::Owned(elem))
     }
 
     pub fn get_elem(&self, pos: u64) -> Result<Option<Elem>> {
-        for (start_pos, elems) in self.batch.iter().rev() {
-            if pos < *start_pos {
-                continue;
-            } else if pos < start_pos + elems.len() as u64 {
-                return Ok(elems.get((pos - start_pos) as usize).cloned());
-            } else {
-                break;
-            }
-        }
+        // for (start_pos, elems) in self.batch.iter().rev() {
+        //     if pos < *start_pos {
+        //         continue;
+        //     } else if pos < start_pos + elems.len() as u64 {
+        //         return Ok(elems.get((pos - start_pos) as usize).cloned());
+        //     } else {
+        //         break;
+        //     }
+        // }
     }
 
     /// Returns the root of the Merkle mountain range.
     pub fn root(&self) -> P::InnerDigest {
-        if self.mmr_size == 0 {
-            return Err(Error::GetRootOnEmpty);
-        } else if self.mmr_size == 1 {
-            return self.get_elem(0)?.ok_or(Error::InconsistentStore);
-        }
-        let peaks: Vec<T> = get_peaks(self.mmr_size)
-            .into_iter()
-            .map(|peak_pos| {
-                self.batch
-                    .get_elem(peak_pos)
-                    .and_then(|elem| elem.ok_or(Error::InconsistentStore))
-            })
-            .collect::<Result<Vec<T>>>()?;
-        self.bag_rhs_peaks(peaks)?.ok_or(Error::InconsistentStore)
+        // if self.mmr_size == 0 {
+        //     return Err(Error::GetRootOnEmpty);
+        // } else if self.mmr_size == 1 {
+        //     return self.get_elem(0)?.ok_or(Error::InconsistentStore);
+        // }
+        // let peaks: Vec<T> = get_peaks(self.mmr_size)
+        //     .into_iter()
+        //     .map(|peak_pos| {
+        //         self.batch
+        //             .get_elem(peak_pos)
+        //             .and_then(|elem| elem.ok_or(Error::InconsistentStore))
+        //     })
+        //     .collect::<Result<Vec<T>>>()?;
+        // self.bag_rhs_peaks(peaks)?.ok_or(Error::InconsistentStore)
     }
 
     pub fn bag_rhs_peaks(&self, mut rhs_peaks: Vec<T>) -> Result<Option<P::InnerDigest>> {
         // println!("rhs_peaks: {:#?}", rhs_peaks);
-        while rhs_peaks.len() > 1 {
-            let right_peak = rhs_peaks.pop().expect("pop");
-            let left_peak = rhs_peaks.pop().expect("pop");
-            rhs_peaks.push(P::TwoToOneHash::compress(&self.two_to_one_hash_param, &right_peak, &left_peak));
-        }
-        Ok(rhs_peaks.pop())
+        // while rhs_peaks.len() > 1 {
+        //     let right_peak = rhs_peaks.pop().expect("pop");
+        //     let left_peak = rhs_peaks.pop().expect("pop");
+        //     rhs_peaks.push(P::TwoToOneHash::compress(&self.two_to_one_hash_param, &right_peak, &left_peak));
+        // }
+        // Ok(rhs_peaks.pop())
     }
 
 
@@ -367,44 +375,44 @@ impl<P: Config> MerkleMountainRange<P> {
     /// Returns the authentication path from leaf at `index` to root.
     pub fn generate_proof(&self, pos_list: Vec<u64>) -> Result<Path<P>, crate::Error> {
 
-        if pos_list.is_empty() {
-            return Err(Error::GenProofForInvalidLeaves);
-        }
-        if self.mmr_size == 1 && index == 0 {
-            return Ok(Path::new(self.mmr_size, Vec::new()));
-        }
-        // ensure positions is sorted
-        let peaks = get_peaks(self.mmr_size);
-        let mut proof: Vec<T> = Vec::new();
-        // generate merkle proof for each peaks
-        let mut bagging_track = 0;
-        for peak_pos in peaks {
-            let pos_list: Vec<_> = take_while_vec(&mut pos_list, |&pos| pos <= peak_pos);
-            if pos_list.is_empty() {
-                bagging_track += 1;
-            } else {
-                bagging_track = 0;
-            }
-            self.gen_proof_for_peak(&mut proof, pos_list, peak_pos)?;
-        }
+        // if pos_list.is_empty() {
+        //     return Err(Error::GenProofForInvalidLeaves);
+        // }
+        // if self.mmr_size == 1 && index == 0 {
+        //     return Ok(Path::new(self.mmr_size, Vec::new()));
+        // }
+        // // ensure positions is sorted
+        // let peaks = get_peaks(self.mmr_size);
+        // let mut proof: Vec<T> = Vec::new();
+        // // generate merkle proof for each peaks
+        // let mut bagging_track = 0;
+        // for peak_pos in peaks {
+        //     let pos_list: Vec<_> = take_while_vec(&mut pos_list, |&pos| pos <= peak_pos);
+        //     if pos_list.is_empty() {
+        //         bagging_track += 1;
+        //     } else {
+        //         bagging_track = 0;
+        //     }
+        //     self.gen_proof_for_peak(&mut proof, pos_list, peak_pos)?;
+        // }
 
-        // ensure no remain positions
-        if !pos_list.is_empty() {
-            return Err(Error::GenProofForInvalidLeaves);
-        }
+        // // ensure no remain positions
+        // if !pos_list.is_empty() {
+        //     return Err(Error::GenProofForInvalidLeaves);
+        // }
 
-        if bagging_track > 1 {
-            let rhs_peaks = proof.split_off(proof.len() - bagging_track);
-            proof.push(self.bag_rhs_peaks(rhs_peaks)?.expect("bagging rhs peaks"));
-        }
+        // if bagging_track > 1 {
+        //     let rhs_peaks = proof.split_off(proof.len() - bagging_track);
+        //     proof.push(self.bag_rhs_peaks(rhs_peaks)?.expect("bagging rhs peaks"));
+        // }
 
-        // Ok(MerkleProof::new(self.mmr_size, proof))
+        // // Ok(MerkleProof::new(self.mmr_size, proof))
 
-        Ok(Path {
-            leaf_index: index,
-            auth_path: path,
-            leaf_sibling_hash,
-        })
+        // Ok(Path {
+        //     leaf_index: index,
+        //     auth_path: path,
+        //     leaf_sibling_hash,
+        // })
     }
 
     /// Given the index and new leaf, return the hash of leaf and an updated path in order from root to bottom non-leaf level.
@@ -415,50 +423,50 @@ impl<P: Config> MerkleMountainRange<P> {
         new_leaf: T,
     ) -> Result<(P::LeafDigest, Vec<P::InnerDigest>), crate::Error> {
         // calculate the hash of leaf
-        let new_leaf_hash: P::LeafDigest = P::LeafHash::evaluate(&self.leaf_hash_param, new_leaf)?;
+        // let new_leaf_hash: P::LeafDigest = P::LeafHash::evaluate(&self.leaf_hash_param, new_leaf)?;
 
-        // calculate leaf sibling hash and locate its position (left or right)
-        let (leaf_left, leaf_right) = if index & 1 == 0 {
-            // leaf on left
-            (&new_leaf_hash, &self.leaf_nodes[index + 1])
-        } else {
-            (&self.leaf_nodes[index - 1], &new_leaf_hash)
-        };
+        // // calculate leaf sibling hash and locate its position (left or right)
+        // let (leaf_left, leaf_right) = if index & 1 == 0 {
+        //     // leaf on left
+        //     (&new_leaf_hash, &self.leaf_nodes[index + 1])
+        // } else {
+        //     (&self.leaf_nodes[index - 1], &new_leaf_hash)
+        // };
 
-        // calculate the updated hash at bottom non-leaf-level
-        let mut path_bottom_to_top = Vec::with_capacity(self.height - 1);
-        {
-            path_bottom_to_top.push(P::TwoToOneHash::evaluate(
-                &self.two_to_one_hash_param,
-                P::LeafInnerDigestConverter::convert(leaf_left.clone())?,
-                P::LeafInnerDigestConverter::convert(leaf_right.clone())?,
-            )?);
-        }
+        // // calculate the updated hash at bottom non-leaf-level
+        // let mut path_bottom_to_top = Vec::with_capacity(self.height - 1);
+        // {
+        //     path_bottom_to_top.push(P::TwoToOneHash::evaluate(
+        //         &self.two_to_one_hash_param,
+        //         P::LeafInnerDigestConverter::convert(leaf_left.clone())?,
+        //         P::LeafInnerDigestConverter::convert(leaf_right.clone())?,
+        //     )?);
+        // }
 
-        // then calculate the updated hash from bottom to root
-        let leaf_index_in_tree = convert_index_to_last_level(index, self.height);
-        let mut prev_index = parent(leaf_index_in_tree).unwrap();
-        while !is_root(prev_index) {
-            let (left_child, right_child) = if is_left_child(prev_index) {
-                (
-                    path_bottom_to_top.last().unwrap(),
-                    &self.non_leaf_nodes[sibling(prev_index).unwrap()],
-                )
-            } else {
-                (
-                    &self.non_leaf_nodes[sibling(prev_index).unwrap()],
-                    path_bottom_to_top.last().unwrap(),
-                )
-            };
-            let evaluated =
-                P::TwoToOneHash::compress(&self.two_to_one_hash_param, left_child, right_child)?;
-            path_bottom_to_top.push(evaluated);
-            prev_index = parent(prev_index).unwrap();
-        }
+        // // then calculate the updated hash from bottom to root
+        // let leaf_index_in_tree = convert_index_to_last_level(index, self.height);
+        // let mut prev_index = parent(leaf_index_in_tree).unwrap();
+        // while !is_root(prev_index) {
+        //     let (left_child, right_child) = if is_left_child(prev_index) {
+        //         (
+        //             path_bottom_to_top.last().unwrap(),
+        //             &self.non_leaf_nodes[sibling(prev_index).unwrap()],
+        //         )
+        //     } else {
+        //         (
+        //             &self.non_leaf_nodes[sibling(prev_index).unwrap()],
+        //             path_bottom_to_top.last().unwrap(),
+        //         )
+        //     };
+        //     let evaluated =
+        //         P::TwoToOneHash::compress(&self.two_to_one_hash_param, left_child, right_child)?;
+        //     path_bottom_to_top.push(evaluated);
+        //     prev_index = parent(prev_index).unwrap();
+        // }
 
-        debug_assert_eq!(path_bottom_to_top.len(), self.height - 1);
-        let path_top_to_bottom: Vec<_> = path_bottom_to_top.into_iter().rev().collect();
-        Ok((new_leaf_hash, path_top_to_bottom))
+        // debug_assert_eq!(path_bottom_to_top.len(), self.height - 1);
+        // let path_top_to_bottom: Vec<_> = path_bottom_to_top.into_iter().rev().collect();
+        // Ok((new_leaf_hash, path_top_to_bottom))
     }
 
     /// Update the leaf at `index` to updated leaf.
@@ -473,15 +481,15 @@ impl<P: Config> MerkleMountainRange<P> {
     /// ```
     /// update(3, {new leaf}) would swap the leaf value at `[I]` and cause a recomputation of `[A]`, `[B]`, and `[E]`.
     pub fn update(&mut self, index: usize, new_leaf: &P::Leaf) -> Result<(), crate::Error> {
-        assert!(index < self.leaf_nodes.len(), "index out of range");
-        let (updated_leaf_hash, mut updated_path) = self.updated_path(index, new_leaf)?;
-        self.leaf_nodes[index] = updated_leaf_hash;
-        let mut curr_index = convert_index_to_last_level(index, self.height);
-        for _ in 0..self.height - 1 {
-            curr_index = parent(curr_index).unwrap();
-            self.non_leaf_nodes[curr_index] = updated_path.pop().unwrap();
-        }
-        Ok(())
+        // assert!(index < self.leaf_nodes.len(), "index out of range");
+        // let (updated_leaf_hash, mut updated_path) = self.updated_path(index, new_leaf)?;
+        // self.leaf_nodes[index] = updated_leaf_hash;
+        // let mut curr_index = convert_index_to_last_level(index, self.height);
+        // for _ in 0..self.height - 1 {
+        //     curr_index = parent(curr_index).unwrap();
+        //     self.non_leaf_nodes[curr_index] = updated_path.pop().unwrap();
+        // }
+        // Ok(())
     }
 
     /// Update the leaf and check if the updated root is equal to `asserted_new_root`.
@@ -493,19 +501,19 @@ impl<P: Config> MerkleMountainRange<P> {
         new_leaf: &P::Leaf,
         asserted_new_root: &P::InnerDigest,
     ) -> Result<bool, crate::Error> {
-        let new_leaf = new_leaf.borrow();
-        assert!(index < self.leaf_nodes.len(), "index out of range");
-        let (updated_leaf_hash, mut updated_path) = self.updated_path(index, new_leaf)?;
-        if &updated_path[0] != asserted_new_root {
-            return Ok(false);
-        }
-        self.leaf_nodes[index] = updated_leaf_hash;
-        let mut curr_index = convert_index_to_last_level(index, self.height);
-        for _ in 0..self.height - 1 {
-            curr_index = parent(curr_index).unwrap();
-            self.non_leaf_nodes[curr_index] = updated_path.pop().unwrap();
-        }
-        Ok(true)
+        // let new_leaf = new_leaf.borrow();
+        // assert!(index < self.leaf_nodes.len(), "index out of range");
+        // let (updated_leaf_hash, mut updated_path) = self.updated_path(index, new_leaf)?;
+        // if &updated_path[0] != asserted_new_root {
+        //     return Ok(false);
+        // }
+        // self.leaf_nodes[index] = updated_leaf_hash;
+        // let mut curr_index = convert_index_to_last_level(index, self.height);
+        // for _ in 0..self.height - 1 {
+        //     curr_index = parent(curr_index).unwrap();
+        //     self.non_leaf_nodes[curr_index] = updated_path.pop().unwrap();
+        // }
+        // Ok(true)
     }
 }
 
