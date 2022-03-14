@@ -1,5 +1,5 @@
 use ark_crypto_primitives::crh::TwoToOneCRH;
-use mmr_crypto_primitives::merkle-mountain-range::{Config, Path};
+use mmr_crypto_primitives::mmr::{Config, MerkleMountainRange, Path};
 
 pub mod common;
 use common::*;
@@ -23,9 +23,9 @@ pub type Root = <TwoToOneHash as TwoToOneCRH>::Output;
 /// A membership proof for a given account.
 pub type SimplePath = Path<MerkleConfig>;
 
-// Run this test via `cargo test --release test_merkle-mountain-range`.
+// Run this test via `cargo test --release test_mmr`.
 #[test]
-fn test_merkle-mountain-range() {
+fn test_mmr() {
     use ark_crypto_primitives::crh::CRH;
     // Let's set up an RNG for use within tests. Note that this is *not* safe
     // for any production use.
@@ -37,19 +37,20 @@ fn test_merkle-mountain-range() {
 
     // Next, let's construct our tree.
     // This follows the API in https://github.com/arkworks-rs/crypto-primitives/blob/6be606259eab0aec010015e2cfd45e4f134cd9bf/src/merkle-mountain-range/mod.rs#L156
-    let tree = SimpleMerkleMountainRange::new(
+    let mmr = SimpleMerkleMountainRange::new(
         &leaf_crh_params,
         &two_to_one_crh_params,
-        &[1u8, 2u8, 3u8, 10u8, 9u8, 17u8, 70u8, 45u8], // the i-th entry is the i-th leaf.
     )
     .unwrap();
 
+    mmr.push_vec(vec![1u8, 2u8, 3u8, 10u8, 9u8, 17u8, 70u8, 45u8]);
+
     // Now, let's try to generate a membership proof for the 5th item.
-    let proof = tree.generate_proof(4).unwrap(); // we're 0-indexing!
+    let proof = mmr.generate_proof(4).unwrap(); // we're 0-indexing!
                                                  // This should be a proof for the membership of a leaf with value 9. Let's check that!
 
     // First, let's get the root we want to verify against:
-    let root = tree.root();
+    let root = mmr.get_root();
     // Next, let's verify the proof!
     let result = proof
         .verify(

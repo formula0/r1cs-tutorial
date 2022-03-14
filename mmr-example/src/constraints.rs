@@ -1,7 +1,7 @@
 use crate::common::*;
 use crate::{Root, SimplePath};
 use ark_crypto_primitives::crh::{TwoToOneCRH, TwoToOneCRHGadget, CRH};
-use mmr_crypto_primitives::merkle-mountain-range::constraints::PathVar;
+use mmr_crypto_primitives::mmr::constraints::PathVar;
 use ark_r1cs_std::prelude::*;
 use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError};
 
@@ -57,11 +57,11 @@ impl ConstraintSynthesizer<ConstraintF> for MerkleMountainRangeVerification {
 
         // TODO: FILL IN THE BLANK!
         let is_member = // TODO: FILL IN THE BLANK!
-        path.verify_membership(
-        &leaf_crh_params,
-        &two_to_one_crh_params,
-        &root,
-        &leaf_bytes.as_slice(),
+            path.verify_membership(
+            &leaf_crh_params,
+            &two_to_one_crh_params,
+            &root,
+            &leaf_bytes.as_slice(),
     )?;
 
     is_member.enforce_equal(&Boolean::TRUE)?;
@@ -71,7 +71,7 @@ impl ConstraintSynthesizer<ConstraintF> for MerkleMountainRangeVerification {
 
 // Run this test via `cargo test --release test_merkle_tree`.
 #[test]
-fn merkle_mountrain_range_constraints_correctness() {
+fn mmr_constraints_correctness() {
     use ark_relations::r1cs::{ConstraintLayer, ConstraintSystem, TracingMode};
     use tracing_subscriber::layer::SubscriberExt;
 
@@ -85,21 +85,21 @@ fn merkle_mountrain_range_constraints_correctness() {
 
     // Next, let's construct our tree.
     // This follows the API in https://github.com/arkworks-rs/crypto-primitives/blob/6be606259eab0aec010015e2cfd45e4f134cd9bf/src/merkle_tree/mod.rs#L156
-    let tree = crate::SimpleMerkleMountainRange::new(
+    let mmr = crate::SimpleMerkleMountainRange::new(
         &leaf_crh_params,
         &two_to_one_crh_params,
-        &[1u8, 2u8, 3u8, 10u8, 9u8, 17u8, 70u8, 45u8], // the i-th entry is the i-th leaf.
-    )
-    .unwrap();
+    );
+
+    mmr.push_vec(vec![1u8, 2u8, 3u8, 10u8, 9u8, 17u8, 70u8, 45u8]); // the i-th entry is the i-th leaf.
 
     // Now, let's try to generate a membership proof for the 5th item, i.e. 9.
-    let proof = tree.generate_proof(4).unwrap(); // we're 0-indexing!
+    let proof = mmr.generate_proof(4).unwrap(); // we're 0-indexing!
                                                  // This should be a proof for the membership of a leaf with value 9. Let's check that!
 
     // First, let's get the root we want to verify against:
-    let root = tree.root();
+    let root = mmr.get_root();
 
-    let circuit = MerkleTreeVerification {
+    let circuit = MerkleMountainRangeVerification {
         // constants
         leaf_crh_params,
         two_to_one_crh_params,
@@ -129,10 +129,10 @@ fn merkle_mountrain_range_constraints_correctness() {
     assert!(is_satisfied);
 }
 
-// Run this test via `cargo test --release test_merkle-mountain-range_constraints_soundness`.
+// Run this test via `cargo test --release test_mmr_constraints_soundness`.
 // This tests that a given invalid authentication path will fail.
 #[test]
-fn merkle-mountain-range_constraints_soundness() {
+fn mmr_constraints_soundness() {
     use ark_relations::r1cs::{ConstraintLayer, ConstraintSystem, TracingMode};
     use tracing_subscriber::layer::SubscriberExt;
 
@@ -149,23 +149,23 @@ fn merkle-mountain-range_constraints_soundness() {
     let tree = crate::SimpleMerkleMountainRange::new(
         &leaf_crh_params,
         &two_to_one_crh_params,
-        &[1u8, 2u8, 3u8, 10u8, 9u8, 17u8, 70u8, 45u8], // the i-th entry is the i-th leaf.
-    )
-    .unwrap();
+    );
+
+    mmr.push_vec(vec![1u8, 2u8, 3u8, 10u8, 9u8, 17u8, 70u8, 45u8]); // the i-th entry is the i-th leaf.
 
     // We just mutate the first leaf
-    let second_tree = crate::SimpleMerkleMountainRange::new(
+    let second_mmr = crate::SimpleMerkleMountainRange::new(
         &leaf_crh_params,
         &two_to_one_crh_params,
-        &[4u8, 2u8, 3u8, 10u8, 9u8, 17u8, 70u8, 45u8], // the i-th entry is the i-th leaf.
-    )
-    .unwrap();
+    );
+
+    second_mmr.push_vec(vec![4u8, 2u8, 3u8, 10u8, 9u8, 17u8, 70u8, 45u8]); // the i-th entry is the i-th leaf.
 
     // Now, let's try to generate a membership proof for the 5th item, i.e. 9.
-    let proof = tree.generate_proof(4).unwrap(); // we're 0-indexing!
+    let proof = mmr.generate_proof(4).unwrap(); // we're 0-indexing!
 
     // But, let's get the root we want to verify against:
-    let wrong_root = second_tree.root();
+    let wrong_root = second_mmr.get_root();
 
     let circuit = MerkleTreeVerification {
         // constants
