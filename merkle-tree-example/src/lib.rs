@@ -7,7 +7,7 @@ use common::*;
 mod constraints;
 // mod constraints_test;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct MerkleConfig;
 impl Config for MerkleConfig {
     // Our Merkle tree relies on two hashes: one to hash leaves, and one to hash pairs
