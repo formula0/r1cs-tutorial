@@ -1,14 +1,20 @@
-use ark_crypto_primitives::crh::constraints::{CRHGadget, TwoToOneCRHGadget};
-use ark_crypto_primitives::crh::injective_map::constraints::{
+use ark_r1cs_std::prelude::UInt8;
+use mmr_crypto_primitives::crh::injective_map::PedersenTwoToOneCRHCompressor;
+use mmr_crypto_primitives::crh::injective_map::constraints::PedersenTwoToOneCRHCompressorGadget;
+use mmr_crypto_primitives::crh::constraints::CRHSchemeGadget;
+use mmr_crypto_primitives::crh::{injective_map::constraints::{
     PedersenCRHCompressorGadget, TECompressorGadget,
-};
-use ark_crypto_primitives::crh::{
+}, MMRTwoToOneCRHSchemeGadget};
+use mmr_crypto_primitives::crh::{
     injective_map::{PedersenCRHCompressor, TECompressor},
     pedersen,
 };
 use ark_ed_on_bls12_381::{constraints::EdwardsVar, EdwardsProjective};
+use mmr_crypto_primitives::mmr::constraints::{ConfigGadget, BytesVarDigestConverter};
 
-pub type TwoToOneHash = PedersenCRHCompressor<EdwardsProjective, TECompressor, TwoToOneWindow>;
+use crate::MerkleConfig;
+
+pub type TwoToOneHash = PedersenTwoToOneCRHCompressor<EdwardsProjective, TECompressor, TwoToOneWindow>;
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct TwoToOneWindow;
 
@@ -29,7 +35,7 @@ impl pedersen::Window for LeafWindow {
     const NUM_WINDOWS: usize = 144;
 }
 
-pub type TwoToOneHashGadget = PedersenCRHCompressorGadget<
+pub type TwoToOneHashGadget = PedersenTwoToOneCRHCompressorGadget<
     EdwardsProjective,
     TECompressor,
     TwoToOneWindow,
@@ -45,8 +51,20 @@ pub type LeafHashGadget = PedersenCRHCompressorGadget<
     TECompressorGadget,
 >;
 
-pub type LeafHashParamsVar = <LeafHashGadget as CRHGadget<LeafHash, ConstraintF>>::ParametersVar;
+pub type LeafHashParamsVar = <LeafHashGadget as CRHSchemeGadget<LeafHash, ConstraintF>>::ParametersVar;
 pub type TwoToOneHashParamsVar =
-    <TwoToOneHashGadget as TwoToOneCRHGadget<TwoToOneHash, ConstraintF>>::ParametersVar;
+    <TwoToOneHashGadget as MMRTwoToOneCRHSchemeGadget<TwoToOneHash, ConstraintF>>::ParametersVar;
 
 pub type ConstraintF = ark_ed_on_bls12_381::Fq;
+type LeafVar<ConstraintF> = [UInt8<ConstraintF>];
+
+pub struct JubJubMerkleMountainRangeParamsVar;
+impl ConfigGadget<MerkleConfig, ConstraintF> for JubJubMerkleMountainRangeParamsVar {
+    type Leaf = LeafVar<ConstraintF>;
+    type LeafDigest = <LeafHashGadget as CRHSchemeGadget<LeafHash, ConstraintF>>::OutputVar;
+    type LeafInnerConverter = BytesVarDigestConverter<Self::LeafDigest, ConstraintF>;
+    type InnerDigest =
+        <TwoToOneHashGadget as MMRTwoToOneCRHSchemeGadget<TwoToOneHash, ConstraintF>>::OutputVar;
+    type LeafHash = LeafHashGadget;
+    type TwoToOneHash = TwoToOneHashGadget;
+}
