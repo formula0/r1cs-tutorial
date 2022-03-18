@@ -58,7 +58,15 @@ impl ConstraintSynthesizer<ConstraintF> for MerkleTreeVerification {
         // TODO: FILL IN THE BLANK!
         // let is_member = XYZ
         //
-        // is_member.enforce_equal(&Boolean::TRUE)?;
+        let is_member = // TODO: FILL IN THE BLANK!
+            path.verify_membership(
+            &leaf_crh_params,
+            &two_to_one_crh_params,
+            &root,
+            &leaf_bytes.as_slice(),
+        )?;
+
+        is_member.enforce_equal(&Boolean::TRUE)?;
 
         Ok(())
     }
@@ -115,6 +123,18 @@ fn merkle_tree_constraints_correctness() {
     // Next, let's make the circuit!
     let cs = ConstraintSystem::new_ref();
     circuit.generate_constraints(cs.clone()).unwrap();
+
+
+    // check total constraints number
+    /* 
+    let cs2 = cs.clone();
+    cs2.finalize();
+    let matrices = cs2.to_matrices().unwrap();
+    let num = matrices.num_constraints;
+
+    println!("constraints num : {:#?}", num);
+    */
+
     // Let's check whether the constraint system is satisfied
     let is_satisfied = cs.is_satisfied().unwrap();
     if !is_satisfied {

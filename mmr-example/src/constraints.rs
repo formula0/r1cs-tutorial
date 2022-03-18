@@ -55,14 +55,13 @@ impl ConstraintSynthesizer<ConstraintF> for MerkleMountainRangeVerification {
         // Now, we have to check membership. How do we do that?
         // Hint: look at https://github.com/arkworks-rs/crypto-primitives/blob/6be606259eab0aec010015e2cfd45e4f134cd9bf/src/merkle_tree/constraints.rs#L135
 
-        // TODO: FILL IN THE BLANK!
         let is_member = // TODO: FILL IN THE BLANK!
             path.verify_membership(
             &leaf_crh_params,
             &two_to_one_crh_params,
             &root,
             &leaf_bytes.as_slice(),
-    )?;
+        )?;
 
     is_member.enforce_equal(&Boolean::TRUE)?;
         Ok(())
@@ -123,8 +122,18 @@ fn mmr_constraints_correctness() {
 
 
     circuit.generate_constraints(cs.clone()).unwrap();
-    // Let's check whether the constraint system is satisfied
     
+    // check total constraints number
+    /* 
+    let cs2 = cs.clone();
+    cs2.finalize();
+    let matrices = cs2.to_matrices().unwrap();
+    let num = matrices.num_constraints;
+
+    println!("constraints num : {:#?}", num);
+    */
+
+    // Let's check whether the constraint system is satisfied
     let is_satisfied = cs.is_satisfied().unwrap();
 
     if !is_satisfied {
