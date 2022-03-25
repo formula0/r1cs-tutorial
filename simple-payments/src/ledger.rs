@@ -71,7 +71,7 @@ impl pedersen::Window for LeafWindow {
     const NUM_WINDOWS: usize = 4;
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct MerkleConfig;
 impl merkle_tree::Config for MerkleConfig {
     type LeafHash = LeafHash;
